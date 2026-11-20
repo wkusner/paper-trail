@@ -29,8 +29,8 @@ At containment 2 or above, do not put anything from the project in a public plac
 | Task | Command |
 |---|---|
 | Start a project | `papertrail init --tier ledgered --containment 1 --purpose "..."` |
-| Run something | `papertrail run --out results/*.csv --question "short title" -- python fit.py` |
-| Extra inputs | `--in path/or/glob`, besides the inputs listed in the config |
+| Run something | `papertrail run --out results/a.csv results/b.csv --question "short title" -- python fit.py` (the command always goes after `--`) |
+| Extra inputs | `--in path ...`, besides the inputs listed in the config; declare every input that is not committed, or `verify --deep` cannot rerun the work |
 | Link to earlier work | `--parent <hash prefix>` (runs whose outputs are this run's inputs are linked automatically) |
 | Note a decision | `papertrail note -m "..."` |
 | Correct a finding | `papertrail correct --supersedes <hash> -m "..."` |
@@ -41,6 +41,12 @@ At containment 2 or above, do not put anything from the project in a public plac
 
 ## Under Seal
 To seal a private idea, use the Under Seal skill to write and stamp the note, then record it here with `papertrail seal --hash <its sha256> --proof <its .ots>`. The ledger keeps only the hash. To date the whole chain, `papertrail anchor`, then stamp the anchor file (Under Seal or `ots stamp`) and commit the proof.
+
+## Things that trip people up
+- `--in`, `--out` and `seal FILE` paths are relative to the current directory; paths in `papertrail.toml` are relative to the project root.
+- Files git ignores are never treated as code. If a run imports an ignored file, say so and suggest un-ignoring it.
+- `verify --deep` reports how many runs it actually reran. If it reran none, say so; do not call the work reproduced.
+- When sealing, keep the private file out of git, and add a random line to short notes so the hash cannot be guessed.
 
 ## Reconstructed work
 Work done before the trail existed is recorded with `papertrail reconstruct`, never with `run`. Say in the lab book what it was rebuilt from. Never present a reconstructed entry as if it had been recorded at the time.

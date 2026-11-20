@@ -54,7 +54,9 @@ containment = {containment}
 
 [paths]
 # Files whose changes matter to results (glob patterns, relative to the project root).
-code = ["**/*.py", "**/*.jl", "**/*.sage", "**/*.sh"]
+# Inside git, files git ignores are never treated as code.
+code = ["**/*.py", "**/*.jl", "**/*.sage", "**/*.sh", "**/*.R", "**/*.ipynb",
+        "**/*.c", "**/*.cpp", "**/*.h", "**/*.rs", "**/*.m", "**/*.gp", "**/*.mpl"]
 # Input data hashed into every run.
 inputs = []
 ledger = "labbook/ledger.jsonl"
@@ -119,27 +121,49 @@ def load(root: Path | None = None) -> Config:
         data = tomllib.loads(raw.decode("utf-8"))
     except tomllib.TOMLDecodeError as e:
         raise ConfigError(f"{CONFIG_NAME}: {e}") from e
-    levels = data.get("levels", {})
+    def table(key):
+        t = data.get(key, {})
+        if not isinstance(t, dict):
+            raise ConfigError(f"[{key}] must be a table")
+        return t
+
+    levels, paths, rules = table("levels"), table("paths"), table("rules")
     tier = levels.get("tier", "logged")
     if tier not in TIERS:
         raise ConfigError(f"tier must be one of {', '.join(TIERS)}, not {tier!r}")
     containment = levels.get("containment", 1)
-    if containment not in CONTAINMENT:
-        raise ConfigError(f"containment must be 0 to 4, not {containment!r}")
-    rules = data.get("rules", {})
+    if type(containment) is not int or containment not in CONTAINMENT:
+        raise ConfigError(f"containment must be a whole number 0 to 4, not {containment!r}")
     unknown = set(rules) - set(RULES)
     if unknown:
         raise ConfigError(f"unknown rule(s) in [rules]: {', '.join(sorted(unknown))}")
-    paths = data.get("paths", {})
+    for k, v in rules.items():
+        if not isinstance(v, bool):
+            raise ConfigError(f"[rules] {k} must be true or false (no quotes), not {v!r}")
+
+    def globs(key):
+        v = paths.get(key, [])
+        if not isinstance(v, list) or not all(isinstance(x, str) for x in v):
+            raise ConfigError(f'[paths] {key} must be a list of strings, e.g. {key} = ["{v}"]' if isinstance(v, str)
+                              else f"[paths] {key} must be a list of strings")
+        return v
+
+    def relpath(key, default):
+        v = paths.get(key, default)
+        if not isinstance(v, str) or Path(v).is_absolute() or ".." in Path(v).parts:
+            raise ConfigError(f"[paths] {key} must be a path inside the project, not {v!r}")
+        return root / v
+
+    name = table("project").get("name", root.name)
     return Config(
         root=root,
-        name=data.get("project", {}).get("name", root.name),
+        name=str(name),
         tier=tier,
         containment=containment,
-        code=list(paths.get("code", [])),
-        inputs=list(paths.get("inputs", [])),
-        ledger=root / paths.get("ledger", "labbook/ledger.jsonl"),
-        labbook=root / paths.get("labbook", "labbook"),
-        overrides={k: bool(v) for k, v in rules.items()},
+        code=globs("code"),
+        inputs=globs("inputs"),
+        ledger=relpath("ledger", "labbook/ledger.jsonl"),
+        labbook=relpath("labbook", "labbook"),
+        overrides=dict(rules),
         raw=raw,
     )

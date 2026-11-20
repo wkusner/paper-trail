@@ -8,6 +8,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 KINDS = {"genesis", "run", "note", "correction", "anchor", "seal"}
+REQUIRED = {"seq", "kind", "time", "prev", "parents", "settings", "body", "hash"}
 
 
 def canonical(obj) -> bytes:
@@ -33,9 +34,13 @@ def read(path: Path) -> list[dict]:
             if not line:
                 continue
             try:
-                out.append(json.loads(line))
-            except json.JSONDecodeError as e:
-                raise LedgerError(f"line {n} is not valid JSON: {e}") from e
+                e = json.loads(line)
+            except json.JSONDecodeError as err:
+                raise LedgerError(f"ledger line {n} is not valid JSON: {err}") from err
+            missing = REQUIRED - set(e) if isinstance(e, dict) else REQUIRED
+            if missing or not isinstance(e.get("body"), dict) or not isinstance(e.get("parents"), list):
+                raise LedgerError(f"ledger line {n} is not a Paper Trail entry")
+            out.append(e)
     return out
 
 
@@ -93,6 +98,8 @@ def check_chain(entries: list[dict]) -> list[str]:
         label = f"entry {e.get('seq', i)}"
         if e.get("seq") != i:
             problems.append(f"{label}: sequence number should be {i}")
+        if e.get("kind") not in KINDS:
+            problems.append(f"{label}: unknown kind {e.get('kind')!r}")
         if e.get("hash") != entry_hash(e):
             problems.append(f"{label}: contents do not match its hash (edited after writing?)")
         if e.get("prev") != (prev["hash"] if prev else None):

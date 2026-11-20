@@ -32,8 +32,14 @@ A project sets both in `papertrail.toml`. Each dial switches rules on by default
 
 `papertrail` enforces `commit_before_compute` and warns on `data_out_of_git` and missing outputs; the containment rules above 1 are commitments for people and for Claude, shown by `papertrail check`.
 
+**What counts as code.** Any file matching the `code` globs that git does not ignore: tracked files, plus new files not yet added. A matching file that is modified, staged, new, deleted or renamed makes the run dirty. Files git ignores are never treated as code, so do not ignore files your computation imports. Outside git, or before the first commit, there is no commit to record; at the `reproducible` tier and above `run` refuses.
+
+**Paths.** In `papertrail.toml`, paths are relative to the project root. On the command line (`--in`, `--out`, `seal FILE`), they are relative to where you are. A path naming an existing file is taken literally even if it contains `[`, `*` or `?`; otherwise it is a glob. Paths outside the project are refused before anything runs.
+
 ## The chain
-Each entry holds the SHA-256 of the entry before it (`prev`) and of the entries it builds on (`parents`), and its own hash over all of that. Changing or deleting anything in the past breaks every hash after it, and `verify` reports it.
+Each entry holds the SHA-256 of the entry before it (`prev`) and of the entries it builds on (`parents`), and its own hash over all of that. Changing, reordering or deleting an earlier entry breaks every link after it, and `verify` reports it.
+
+Two limits, stated plainly. Cutting entries off the end leaves a shorter chain that is still consistent, and anyone with write access could rewrite the whole chain and recompute every hash. `verify` catches the first whenever an anchor or seal file names an entry that is gone, and git history shows both. Real protection against rewriting comes only from anchoring: once a head hash is timestamped outside the project, the chain up to it cannot be changed without the mismatch showing.
 
 | Kind | Records |
 |---|---|
@@ -51,10 +57,14 @@ A run that reads a file another run wrote, byte for byte, is linked to it as a p
 Entry times and git dates are self-reported. For dates others can trust, `papertrail anchor` writes the current head hash to `labbook/anchors/` and stamps it with OpenTimestamps if `ots` is installed. Since each entry includes the one before it, one stamp dates everything before it. Run `ots upgrade` on the proof after a few hours and commit it. The head hash can also go into a public sealed ledger, so a private project still has public, dated evidence.
 
 ## Sealing
-`papertrail seal FILE` records only the file's SHA-256 (and an optional public label) and stamps it. Opening it later means revealing the file; anyone can hash it and compare. A note already sealed with Under Seal is recorded with `papertrail seal --hash <sha256> --proof <file.ots>`.
+`papertrail seal FILE` records only the file's SHA-256 (and an optional public label) and stamps it. Opening it later means revealing the file; anyone can hash it and compare. A note already sealed with Under Seal is recorded with `papertrail seal --hash <sha256> --proof <file.ots>`; the proof is copied into `labbook/seals/`.
+
+Keep the sealed file itself out of the repository. A short or guessable note can be found by hashing guesses, so add a line of random characters to it before sealing.
 
 ## Verify
-`papertrail verify` checks that every entry matches its hash, links to the one before it, and names only earlier parents; that each output file still matches the run that last wrote it; and that anchor and seal files exist. `papertrail verify --deep` also reruns each latest-writing run made at the current commit with unchanged inputs, and fails if its outputs differ by a single byte. Runs at other commits are listed, not rerun.
+`papertrail verify` checks that every entry matches its hash, links to the one before it, has a known kind and names only earlier parents; that each output file still exists and matches the run that last wrote it; that every anchor and seal file matches its entry; and that no anchor or seal file is left without one.
+
+`papertrail verify --deep` also reruns, for each output, the run that last wrote it. Each rerun happens in a scratch checkout of the run's own commit, with its recorded inputs copied in, so your working files are never touched. It fails if the rerun exits with an error or any output differs by a single byte. Runs that failed originally, were made from uncommitted code, or whose inputs have since changed are listed and not rerun; the summary says how many were rerun. A rerun can only see the commit and the declared inputs, so an input that is neither committed nor declared with `--in` (or in the config) makes it fail: declare it.
 
 ## Step by step
 1. `papertrail init --tier ledgered --containment 1 --purpose "..."`; edit `papertrail.toml` (code globs, input globs); commit it with `labbook/`.
@@ -69,3 +79,4 @@ Entry times and git dates are self-reported. For dates others can trust, `papert
 - Report a number with no ledger entry behind it.
 - Present a reconstructed entry as if recorded at the time.
 - Commit data that the containment level keeps out of git.
+- Let git ignore code your computation uses.

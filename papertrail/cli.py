@@ -4,8 +4,10 @@ from __future__ import annotations
 import argparse
 import re
 import shutil
+import os
 import subprocess
 import sys
+import tempfile
 import time
 from datetime import date
 from pathlib import Path
@@ -63,7 +65,15 @@ def warn(msg: str):
 
 
 def code_files(cfg: C.Config) -> list[Path]:
-    return G.expand(cfg.root, cfg.code, exclude=[cfg.ledger])
+    return G.code_files(cfg.root, cfg.code, exclude=[cfg.ledger])
+
+
+def user_paths(cfg: C.Config, patterns) -> list[str]:
+    """--in/--out patterns are relative to where you are; store them relative to the root."""
+    try:
+        return [G.to_root(cfg.root, Path.cwd(), p) for p in patterns or []]
+    except G.PathError as e:
+        die(str(e))
 
 
 def resolve_parents(entries, prefixes):
@@ -87,6 +97,8 @@ def producers(entries: list[dict], files: dict[str, str]) -> list[str]:
 
 def cmd_init(a):
     root = Path.cwd().resolve()
+    if not G.is_repo(root):
+        warn("this folder is not a git repository; runs cannot name a commit until it is (git init)")
     cfg_path = root / C.CONFIG_NAME
     if not cfg_path.exists():
         if a.tier not in C.TIERS:
@@ -117,36 +129,45 @@ def cmd_run(a):
     entries = L.read(cfg.ledger)
     if not entries:
         die("no ledger yet; run `papertrail init`")
-    code = code_files(cfg)
-    dirty = G.dirty_code(cfg.root, code)
-    if dirty and cfg.rule("commit_before_compute") and not a.allow_dirty:
+    out_pats = user_paths(cfg, a.outputs)
+    in_pats = user_paths(cfg, a.inputs)
+    commit = G.commit(cfg.root)
+    enforce = cfg.rule("commit_before_compute") and not a.allow_dirty
+    if commit is None and enforce:
+        die("no commit to record (not a git repository, or nothing committed yet); commit first, or pass --allow-dirty")
+    dirty = G.dirty_code(cfg.root, cfg.code)
+    if dirty and enforce:
         die("uncommitted code; commit first (or pass --allow-dirty, which is recorded):\n  " + "\n  ".join(dirty))
-    inputs = G.expand(cfg.root, cfg.inputs + (a.inputs or []))
+    extra_in = G.expand(cfg.root, in_pats)
+    if in_pats and not extra_in:
+        warn("no files matched --in")
+    inputs = sorted(set(G.expand(cfg.root, cfg.inputs)) | set(extra_in))
     in_hashes = G.hashes(cfg.root, inputs)
     in_git = G.tracked(cfg.root, inputs)
     if in_git and cfg.rule("data_out_of_git"):
         warn("input data is tracked in git, against data_out_of_git: " + ", ".join(in_git))
-    if cfg.rule("hash_outputs") and not a.outputs:
+    if cfg.rule("hash_outputs") and not out_pats:
         warn("this tier hashes outputs; name them with --out")
-    commit = G.commit(cfg.root)
+    code = code_files(cfg)
+    code_hashes = G.hashes(cfg.root, code)
     started = L.now()
     t0 = time.monotonic()
     try:
         rc = subprocess.run(a.command, cwd=Path.cwd()).returncode
-    except FileNotFoundError:
-        die(f"command not found: {a.command[0]}")
+    except (FileNotFoundError, PermissionError) as e:
+        die(f"could not start {a.command[0]}: {e.strerror}")
     seconds = round(time.monotonic() - t0, 3)
-    outs = G.expand(cfg.root, a.outputs or [])
-    if a.outputs and not outs:
+    outs = G.expand(cfg.root, out_pats)
+    if out_pats and not outs:
         warn("no files matched --out")
     body = {
-        "command": a.command,
-        "cwd": str(Path.cwd().resolve().relative_to(cfg.root)),
+        "command": [G.text(x) for x in a.command],
+        "cwd": Path(os.path.relpath(Path.cwd().resolve(), cfg.root)).as_posix(),
         "question": a.question or "",
         "commit": commit,
         "dirty": dirty,
         "allow_dirty": bool(a.allow_dirty),
-        "code": G.hashes(cfg.root, code),
+        "code": code_hashes,
         "inputs": in_hashes,
         "outputs": G.hashes(cfg.root, outs),
         "exit_code": rc,
@@ -181,8 +202,8 @@ def cmd_correct(a):
 def cmd_reconstruct(a):
     cfg = C.load()
     entries = L.read(cfg.ledger)
-    outs = G.expand(cfg.root, a.outputs or [])
-    ins = G.expand(cfg.root, a.inputs or [])
+    outs = G.expand(cfg.root, user_paths(cfg, a.outputs))
+    ins = G.expand(cfg.root, user_paths(cfg, a.inputs))
     body = {
         "reconstructed": True,
         "command": a.command,
@@ -252,25 +273,81 @@ def cmd_seal(a):
     f.write_text(digest + "\n")
     body = {"sha256": digest, "label": a.label or "", "file": str(f.relative_to(cfg.root))}
     if a.proof:
-        body["proof_sha256"] = G.sha256_file(Path(a.proof))
+        proof = Path(a.proof)
+        if not proof.is_file():
+            die(f"no such proof file: {a.proof}")
+        kept = d / f"{digest}.txt.ots"
+        if proof.resolve() != kept.resolve():
+            shutil.copyfile(proof, kept)
+        body["proof_sha256"] = G.sha256_file(kept)
         body["ots"] = True
     else:
         body["ots"] = _stamp(f)
     e = L.append(cfg.ledger, "seal", body, cfg.settings())
     print(f"seal {e['hash'][:12]} for {digest[:12]}; the sealed file's contents are not recorded")
+    if a.file:
+        try:
+            Path(a.file).resolve().relative_to(cfg.root)
+            warn("the sealed file is inside the project; keep it out of git (and out of any public copy)")
+        except ValueError:
+            pass
     if not body["ots"]:
         print(f"no timestamp proof yet; stamp {f.relative_to(cfg.root)} with `ots stamp` or Under Seal")
 
 
-def verify(cfg: C.Config, deep: bool) -> tuple[list[str], list[str]]:
+def _rerun(cfg: C.Config, e: dict) -> tuple[str, str]:
+    """Rerun one run in a scratch worktree at its recorded commit. Returns (outcome, message)."""
+    b = e["body"]
+    tag = f"run {e['hash'][:12]}"
+    if b.get("exit_code") != 0:
+        return "skip", f"{tag}: not rerun (it failed originally)"
+    if not b.get("commit") or b.get("dirty"):
+        return "skip", f"{tag}: not rerun (it was not made from a clean commit)"
+    for path, h in b.get("inputs", {}).items():
+        p = cfg.root / path
+        if not p.is_file() or G.sha256_file(p) != h:
+            return "skip", f"{tag}: not rerun (input {path} has changed or is missing)"
+    tmp = Path(tempfile.mkdtemp(prefix="papertrail-"))
+    wt = tmp / "tree"
+    try:
+        if G.git(cfg.root, "worktree", "add", "--detach", "-q", str(wt), b["commit"]) is None:
+            return "skip", f"{tag}: not rerun (cannot check out commit {b['commit'][:12]})"
+        for path in b.get("inputs", {}):
+            dst = wt / path
+            if not dst.is_file():
+                dst.parent.mkdir(parents=True, exist_ok=True)
+                shutil.copyfile(cfg.root / path, dst)
+        for path in b.get("outputs", {}):
+            if (wt / path).is_file() and not G.tracked(wt, [wt / path]):
+                (wt / path).unlink()
+        cwd = wt / b.get("cwd", ".")
+        cwd.mkdir(parents=True, exist_ok=True)
+        try:
+            rc = subprocess.run(b["command"], cwd=cwd, capture_output=True).returncode
+        except OSError as err:
+            return "fail", f"{tag}: rerun could not start: {err}"
+        got = {p: G.sha256_file(wt / p) for p in b["outputs"] if (wt / p).is_file()}
+        if rc != 0:
+            return "fail", f"{tag}: rerun exited {rc} (an undeclared input? declare it with --in)"
+        if got != b["outputs"]:
+            bad = sorted(p for p in b["outputs"] if got.get(p) != b["outputs"][p])
+            return "fail", f"{tag}: rerun did not reproduce {', '.join(bad)} byte for byte"
+        return "ok", f"{tag}: rerun at {b['commit'][:12]} reproduced {len(got)} output(s)"
+    finally:
+        G.git(cfg.root, "worktree", "remove", "--force", str(wt))
+        shutil.rmtree(tmp, ignore_errors=True)
+
+
+def verify(cfg: C.Config, deep: bool) -> tuple[list[str], list[str], tuple[int, int]]:
     problems, notes = [], []
     try:
         entries = L.read(cfg.ledger)
     except L.LedgerError as e:
-        return [str(e)], notes
+        return [str(e)], notes, (0, 0)
     if not entries:
-        return ["the ledger is empty"], notes
+        return ["the ledger is empty"], notes, (0, 0)
     problems += L.check_chain(entries)
+    hashes = {e["hash"] for e in entries}
     latest: dict[str, tuple[str, dict]] = {}
     for e in entries:
         if e["kind"] == "run" and not e["body"].get("reconstructed"):
@@ -278,45 +355,45 @@ def verify(cfg: C.Config, deep: bool) -> tuple[list[str], list[str]]:
                 latest[path] = (h, e)
     for path, (h, e) in sorted(latest.items()):
         p = cfg.root / path
-        if not p.exists():
-            notes.append(f"{path}: missing (last written by run {e['hash'][:12]})")
+        if not p.is_file():
+            problems.append(f"{path}: missing (last written by run {e['hash'][:12]})")
         elif G.sha256_file(p) != h:
             problems.append(f"{path}: changed since run {e['hash'][:12]} recorded it")
+    recorded = {}
     for e in entries:
         if e["kind"] in ("anchor", "seal"):
-            f = cfg.root / e["body"]["file"]
-            if not f.exists():
-                problems.append(f"{e['body']['file']}: missing ({e['kind']} {e['hash'][:12]})")
+            f = cfg.root / e["body"].get("file", "")
+            recorded[f.resolve()] = e
+            if not f.is_file():
+                problems.append(f"{e['body'].get('file')}: missing ({e['kind']} {e['hash'][:12]})")
+                continue
+            want = e["body"].get("head") if e["kind"] == "anchor" else e["body"].get("sha256")
+            if f.read_text().strip() != want:
+                problems.append(f"{e['body']['file']}: does not match its {e['kind']} entry {e['hash'][:12]}")
+    for sub, kind in (("anchors", "anchor"), ("seals", "seal")):
+        for f in sorted((cfg.labbook / sub).glob("*.txt")):
+            if f.resolve() not in recorded:
+                head = f.read_text().strip()
+                why = "names an entry missing from the ledger" if kind == "anchor" and head not in hashes else "has no entry in the ledger"
+                problems.append(f"{f.relative_to(cfg.root)}: {why} (entries removed?)")
+    reran = (0, 0)
     if deep:
-        head = G.commit(cfg.root)
-        writers = {e["hash"]: e for _, e in latest.values()}
-        for e in sorted(writers.values(), key=lambda e: e["seq"]):
-            b = e["body"]
-            tag = f"run {e['hash'][:12]}"
-            if b.get("exit_code") != 0:
-                notes.append(f"{tag}: not rerun (it failed originally)")
-                continue
-            if b.get("commit") != head or b.get("dirty"):
-                notes.append(f"{tag}: not rerun (made at {str(b.get('commit'))[:12]}{', dirty' if b.get('dirty') else ''}; HEAD is {str(head)[:12]})")
-                continue
-            if G.dirty_code(cfg.root, code_files(cfg)):
-                notes.append(f"{tag}: not rerun (code has uncommitted changes)")
-                continue
-            if G.hashes(cfg.root, G.expand(cfg.root, list(b["inputs"]))) != b["inputs"]:
-                notes.append(f"{tag}: not rerun (its inputs have changed)")
-                continue
-            rc = subprocess.run(b["command"], cwd=cfg.root / b["cwd"], capture_output=True).returncode
-            now_out = {p: G.sha256_file(cfg.root / p) for p in b["outputs"] if (cfg.root / p).exists()}
-            if rc != 0 or now_out != b["outputs"]:
-                problems.append(f"{tag}: rerun did not reproduce its outputs byte for byte")
-            else:
-                notes.append(f"{tag}: rerun reproduced {len(now_out)} outputs")
-    return problems, notes
+        if not G.is_repo(cfg.root):
+            notes.append("deep: not a git repository, so nothing can be rerun")
+        else:
+            writers = sorted({e["hash"]: e for _, e in latest.values()}.values(), key=lambda e: e["seq"])
+            ok = 0
+            for e in writers:
+                outcome, msg = _rerun(cfg, e)
+                (problems if outcome == "fail" else notes).append(msg)
+                ok += outcome == "ok"
+            reran = (ok, len(writers))
+    return problems, notes, reran
 
 
 def cmd_verify(a):
     cfg = C.load()
-    problems, notes = verify(cfg, a.deep)
+    problems, notes, (ok, total) = verify(cfg, a.deep)
     for n in notes:
         print("  note: " + n)
     for p in problems:
@@ -324,7 +401,12 @@ def cmd_verify(a):
     if problems:
         print(f"verify failed: {len(problems)} problem(s)")
         sys.exit(1)
-    print(f"verify passed: {len(L.read(cfg.ledger))} entries{' (deep)' if a.deep else ''}")
+    msg = f"verify passed: {len(L.read(cfg.ledger))} entries"
+    if a.deep:
+        msg += f"; deep: {ok} of {total} result-producing runs rerun and reproduced"
+        if total and ok < total:
+            msg += " (see notes for the rest)"
+    print(msg)
 
 
 def cmd_check(a):
@@ -341,7 +423,7 @@ def cmd_check(a):
     chain = L.check_chain(entries) if entries else ["the ledger is empty"]
     print("\nState")
     print(f"  commit: {(G.commit(cfg.root) or 'none')[:12]}")
-    dirty = G.dirty_code(cfg.root, code_files(cfg))
+    dirty = G.dirty_code(cfg.root, cfg.code) if G.is_repo(cfg.root) else ['(not a git repository)']
     print(f"  uncommitted code: {', '.join(dirty) if dirty else 'none'}")
     print(f"  ledger: {len(entries)} entries; chain {'intact' if not chain else 'BROKEN'}")
     for p in chain:
@@ -372,12 +454,11 @@ def main(argv=None):
     s.set_defaults(fn=cmd_init)
 
     s = sub.add_parser("run", help="run a command and record it: papertrail run [options] -- command")
-    s.add_argument("--out", dest="outputs", action="append", help="output file or glob (repeatable)")
-    s.add_argument("--in", dest="inputs", action="append", help="extra input file or glob (repeatable)")
+    s.add_argument("--out", dest="outputs", action="extend", nargs="+", help="output files or globs, relative to where you are")
+    s.add_argument("--in", dest="inputs", action="extend", nargs="+", help="extra input files or globs, relative to where you are")
     s.add_argument("--parent", action="append", help="hash prefix of an entry this run builds on")
     s.add_argument("--question", help="lab book entry or short question this run serves")
     s.add_argument("--allow-dirty", action="store_true", help="run with uncommitted code; recorded")
-    s.add_argument("command", nargs=argparse.REMAINDER)
     s.set_defaults(fn=cmd_run)
 
     s = sub.add_parser("note", help="record a note")
@@ -396,8 +477,8 @@ def main(argv=None):
     s.add_argument("--command", default="", help="the command as best known")
     s.add_argument("--claimed-date", help="when the work was originally done, as best known")
     s.add_argument("--commit", help="the commit it was done at, if known")
-    s.add_argument("--out", dest="outputs", action="append")
-    s.add_argument("--in", dest="inputs", action="append")
+    s.add_argument("--out", dest="outputs", action="extend", nargs="+")
+    s.add_argument("--in", dest="inputs", action="extend", nargs="+")
     s.add_argument("--parent", action="append")
     s.set_defaults(fn=cmd_reconstruct)
 
@@ -412,7 +493,7 @@ def main(argv=None):
     s.add_argument("file", nargs="?")
     s.add_argument("--hash", help="a SHA-256 already computed (e.g. by Under Seal)")
     s.add_argument("--proof", help="an existing .ots proof for it")
-    s.add_argument("--label", help="a public label (optional; leave out to reveal nothing)")
+    s.add_argument("--label", help="a public label (optional). A short or guessable note can be found from its hash: add a random line to it before sealing")
     s.set_defaults(fn=cmd_seal)
 
     s = sub.add_parser("verify", help="check the chain and the recorded outputs")
@@ -422,9 +503,15 @@ def main(argv=None):
     s = sub.add_parser("check", help="show the rules, the dials and the project's state")
     s.set_defaults(fn=cmd_check)
 
+    argv = list(sys.argv[1:] if argv is None else argv)
+    command = []
+    if argv[:1] == ["run"]:
+        if "--" not in argv:
+            die("put the command after --, e.g. papertrail run --out results.csv -- python fit.py")
+        cut = argv.index("--")
+        argv, command = argv[:cut], argv[cut + 1:]
     a = p.parse_args(argv)
-    if a.cmd == "run" and a.command and a.command[0] == "--":
-        a.command = a.command[1:]
+    a.command = command
     try:
         a.fn(a)
     except (C.ConfigError, L.LedgerError) as e:

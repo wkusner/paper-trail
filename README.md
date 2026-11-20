@@ -2,7 +2,7 @@
 
 **Every number traces back to what made it.**
 
-Paper Trail is a lab protocol and a small tool that enforces it. Wrap any command, in any language, with `papertrail run`, and it records the commit, the code, the inputs, the outputs and the environment in an append-only, hash-chained ledger. A lab book is kept alongside it, one entry per question. `papertrail verify` checks the whole chain and can rerun the work to the same bytes.
+Paper Trail is a lab protocol and a small tool that enforces it. Wrap any command, in any language, with `papertrail run`, and it records the commit, the code, the inputs, the outputs and the environment in an append-only, hash-chained ledger. A lab book is kept alongside it, one entry per question. `papertrail verify` checks the whole chain, and `verify --deep` reruns the work in a scratch checkout and checks it reproduces to the same bytes.
 
 Each project chooses how strict to be with two dials: a **rigor tier** (sketch, logged, reproducible, ledgered, sealed) and a **containment level** (open, standard, private, restricted, air-gapped). Trusted dates come from anchoring the chain head with OpenTimestamps; private results can be sealed by hash, in the manner of [Under Seal].
 
@@ -12,7 +12,7 @@ It comes with a Claude skill, so Claude follows the protocol, checks it at the s
 ```
 pip install git+https://github.com/<owner>/paper-trail
 ```
-Python 3.11 or later; no other dependencies. For trusted timestamps, also install the OpenTimestamps client (`pip install opentimestamps-client`).
+Python 3.11 or later on macOS or Linux (not Windows yet); no other dependencies. For trusted timestamps, also install the OpenTimestamps client (`pip install opentimestamps-client`).
 
 **As a Claude Code plugin:** `/plugin marketplace add <owner>/paper-trail`, then `/plugin install paper-trail@paper-trail`.
 **As a Claude skill on its own:** upload the `skills/paper-trail` folder as a skill.
@@ -35,7 +35,7 @@ papertrail anchor
 | Command | Does |
 |---|---|
 | `init` | writes `papertrail.toml`, the lab book index and the genesis entry |
-| `run [--out G] [--in G] [--parent H] [--allow-dirty] -- cmd` | runs a command and records it |
+| `run [--out F...] [--in F...] [--parent H] [--allow-dirty] -- cmd` | runs a command and records it; paths are relative to where you are |
 | `entry "title"` | opens a lab book entry for one question |
 | `note -m "..."` | records a decision or observation |
 | `correct --supersedes H -m "..."` | records a correction |

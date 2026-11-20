@@ -137,7 +137,7 @@ def test_verify_catches_a_changed_output(proj):
 def test_deep_verify_reruns_and_reproduces(proj):
     pt(proj, "run", "--out", "out.txt", "--", PY, "sq.py")
     r = pt(proj, "verify", "--deep")
-    assert "reproduced 1 outputs" in r.stdout
+    assert "1 of 1 result-producing runs rerun and reproduced" in r.stdout
 
 
 def test_deep_verify_catches_nondeterminism(proj):
@@ -145,8 +145,11 @@ def test_deep_verify_catches_nondeterminism(proj):
     sh(proj, "git", "add", "rand.py")
     sh(proj, "git", "commit", "-qm", "rand")
     pt(proj, "run", "--out", "r.txt", "--", PY, "rand.py")
+    before = (proj / "r.txt").read_text()
     r = pt(proj, "verify", "--deep", check=False)
     assert r.returncode == 1 and "did not reproduce" in r.stdout
+    assert (proj / "r.txt").read_text() == before  # the original result is untouched
+    assert pt(proj, "verify").returncode == 0
 
 
 def test_parents_link_automatically_through_matching_files(proj):
@@ -220,7 +223,100 @@ def test_runs_from_a_subdirectory(proj):
     (proj / "sub/w.py").write_text("open('w.txt','w').write('x')\n")
     sh(proj, "git", "add", "sub/w.py")
     sh(proj, "git", "commit", "-qm", "sub")
-    pt(proj / "sub", "run", "--out", "sub/w.txt", "--", PY, "w.py")
+    pt(proj / "sub", "run", "--out", "w.txt", "--", PY, "w.py")
     b = ledger(proj)[-1]["body"]
     assert b["cwd"] == "sub" and "sub/w.txt" in b["outputs"]
-    assert "reproduced" in pt(proj, "verify", "--deep").stdout
+    assert "1 of 1" in pt(proj, "verify", "--deep").stdout
+
+
+def test_several_outputs_after_shell_glob_expansion(proj):
+    (proj / "two.py").write_text("open('a.csv','w').write('a'); open('b.csv','w').write('b')\n")
+    sh(proj, "git", "add", "two.py")
+    sh(proj, "git", "commit", "-qm", "two")
+    pt(proj, "run", "--out", "a.csv", "b.csv", "--", PY, "two.py")
+    assert set(ledger(proj)[-1]["body"]["outputs"]) == {"a.csv", "b.csv"}
+
+
+def test_run_without_double_dash_is_refused(proj):
+    r = pt(proj, "run", PY, "sq.py", check=False)
+    assert r.returncode == 2 and "after --" in r.stderr and not (proj / "out.txt").exists()
+
+
+def test_deep_still_reruns_after_results_are_committed(proj):
+    pt(proj, "run", "--out", "out.txt", "--", PY, "sq.py")
+    sh(proj, "git", "add", "-A")
+    sh(proj, "git", "commit", "-qm", "results")
+    assert "1 of 1" in pt(proj, "verify", "--deep").stdout
+
+
+def test_truncation_after_an_anchor_is_caught(proj):
+    pt(proj, "note", "-m", "a")
+    pt(proj, "anchor")
+    pt(proj, "note", "-m", "b")
+    p = proj / "labbook/ledger.jsonl"
+    p.write_text("\n".join(p.read_text().splitlines()[:2]) + "\n")
+    r = pt(proj, "verify", check=False)
+    assert r.returncode == 1 and "anchors/" in r.stdout
+
+
+def test_tampered_anchor_file_is_caught(proj):
+    pt(proj, "anchor")
+    f = proj / ledger(proj)[-1]["body"]["file"]
+    f.write_text("0" * 64 + "\n")
+    assert pt(proj, "verify", check=False).returncode == 1
+
+
+def test_deleted_code_file_is_dirty(proj):
+    (proj / "helper.py").write_text("x=1\n")
+    sh(proj, "git", "add", "helper.py")
+    sh(proj, "git", "commit", "-qm", "helper")
+    (proj / "helper.py").unlink()
+    r = pt(proj, "run", "--", PY, "sq.py", check=False)
+    assert r.returncode == 2 and "helper.py" in r.stderr
+
+
+def test_no_commit_is_refused_at_reproducible(tmp_path):
+    sh(tmp_path, "git", "init", "-q")
+    pt(tmp_path, "init", "--tier", "reproducible")
+    (tmp_path / "a.txt").write_text("x")
+    r = pt(tmp_path, "run", "--", PY, "-c", "print(1)", check=False)
+    assert r.returncode == 2 and "no commit" in r.stderr
+
+
+def test_out_outside_project_refused_before_running(proj):
+    r = pt(proj, "run", "--out", "/tmp/x.txt", "--", PY, "sq.py", check=False)
+    assert r.returncode == 2 and not (proj / "out.txt").exists()
+    r = pt(proj, "run", "--out", "../x.txt", "--", PY, "sq.py", check=False)
+    assert r.returncode == 2 and "outside the project" in r.stderr
+
+
+def test_glob_characters_in_file_names_are_literal(proj):
+    (proj / "data/s[1].csv").write_text("1\n")
+    (proj / "data/s1.csv").write_text("other\n")
+    pt(proj, "run", "--in", "data/s[1].csv", "--", PY, "sq.py")
+    assert "data/s[1].csv" in ledger(proj)[-1]["body"]["inputs"]
+
+
+def test_config_types_are_checked(proj):
+    base = (proj / "papertrail.toml").read_text()
+    (proj / "papertrail.toml").write_text(base.replace('inputs = ["data/*.txt"]', 'inputs = "data.csv"'))
+    assert "list of strings" in pt(proj, "check", check=False).stderr
+    (proj / "papertrail.toml").write_text(base + 'commit_before_compute = "false"\n')
+    assert "true or false" in pt(proj, "check", check=False).stderr
+    (proj / "papertrail.toml").write_text(base.replace("containment = 1", "containment = 2.0"))
+    assert "whole number" in pt(proj, "check", check=False).stderr
+
+
+def test_garbage_ledger_line_is_reported_not_a_traceback(proj):
+    with (proj / "labbook/ledger.jsonl").open("a") as f:
+        f.write("[]\n")
+    r = pt(proj, "verify", check=False)
+    assert r.returncode in (1, 2) and "Traceback" not in r.stderr and "not a Paper Trail entry" in (r.stdout + r.stderr)
+
+
+def test_seal_with_proof_keeps_a_copy(proj, tmp_path_factory):
+    d = tmp_path_factory.mktemp("p")
+    (d / "n.ots").write_bytes(b"proof")
+    pt(proj, "seal", "--hash", "A" * 64, "--proof", str(d / "n.ots"))
+    assert (proj / "labbook/seals" / ("a" * 64 + ".txt.ots")).read_bytes() == b"proof"
+    assert pt(proj, "seal", "--hash", "b" * 64, "--proof", "missing.ots", check=False).returncode == 2
