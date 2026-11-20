@@ -1,6 +1,8 @@
 {
   "name": "paper-trail",
-  "description": "A lab protocol for Claude: hash-chained run ledger, lab book, two strictness dials, anchoring and sealing.",
+  "description": "A lab protocol for Claude (hash-chained run ledger, lab book, tunable levels, anchoring and sealing) and a skill for spotting steps that should be tools.",
   "version": "0.1.0",
-  "author": { "name": "Wöden Kusner" }
+  "author": {
+    "name": "Wöden Kusner"
+  }
 }

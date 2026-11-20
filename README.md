@@ -4,9 +4,14 @@
 
 Paper Trail is a lab protocol and a small tool that enforces it. Wrap any command, in any language, with `papertrail run`, and it records the commit, the code, the inputs, the outputs and the environment in an append-only, hash-chained ledger. A lab book is kept alongside it, one entry per question. `papertrail verify` checks the whole chain, and `verify --deep` reruns the work in a scratch checkout and checks it reproduces to the same bytes.
 
-Each project chooses how strict to be with two dials: a **rigor tier** (sketch, logged, reproducible, ledgered, sealed) and a **containment level** (open, standard, private, restricted, air-gapped). Trusted dates come from anchoring the chain head with OpenTimestamps; private results can be sealed by hash, in the manner of [Under Seal].
+Each project chooses how strict to be with two dials, which set standard defaults for every rule and time window (any of them can then be tuned): a **rigor tier** (sketch, logged, reproducible, ledgered, sealed) and a **containment level** (open, standard, private, restricted, air-gapped). Trusted dates come from anchoring the chain head with OpenTimestamps; private results can be sealed by hash, in the manner of [Under Seal].
 
-It comes with a Claude skill, so Claude follows the protocol, checks it at the start and end of each session, and says plainly when a step broke it.
+It comes with two Claude skills:
+- **paper-trail**: Claude follows the protocol, checks it at the start and end of each session, and says plainly when a step broke it.
+- **muscle-memory**: Claude notices when a step it keeps doing by reasoning (counting, checking a rule, date math) should be a tool instead, and says so in a line, with the payoff.
+
+## Tools before talk
+A model call is the right way to draft, review or decide. It is the wrong way to count, hash, compare dates or check a written rule: it costs something every time, can answer differently when asked twice, and leaves no test behind. Paper Trail is the protocol made into a tool for exactly that reason, and the muscle-memory skill keeps finding the next candidates. Build the smallest tool that works, on the third time a step comes up, and keep a list of the rest.
 
 ## Install
 ```
@@ -36,7 +41,7 @@ papertrail anchor
 |---|---|
 | `init` | writes `papertrail.toml`, the lab book index and the genesis entry |
 | `run [--out F...] [--in F...] [--parent H] [--allow-dirty] -- cmd` | runs a command and records it; paths are relative to where you are |
-| `entry "title"` | opens a lab book entry for one question |
+| `entry "title"`, `entry --close FILE` | opens a lab book entry for one question; closes it, recording its hash and the time |
 | `note -m "..."` | records a decision or observation |
 | `correct --supersedes H -m "..."` | records a correction |
 | `reconstruct -m "..." --built-from "..."` | records earlier work, labelled as reconstructed |

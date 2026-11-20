@@ -20,6 +20,10 @@ def entry_hash(entry: dict) -> str:
     return hashlib.sha256(canonical(body)).hexdigest()
 
 
+def parse_time(t: str) -> datetime:
+    return datetime.fromisoformat(t)
+
+
 def now() -> str:
     return datetime.now(timezone.utc).isoformat(timespec="seconds")
 

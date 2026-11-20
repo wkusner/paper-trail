@@ -16,7 +16,7 @@ At the end, run `papertrail check` again, and `papertrail verify` if results wer
 1. **Only through the trail.** Computations that produce results run through `papertrail run`. Never type up a result table by hand.
 2. **Commit before you compute.** Commit the code first. Use `--allow-dirty` only for trying things out, say so, and do not report its results.
 3. **Append, never edit.** Never edit or delete lines of the ledger or past lab book entries. Corrections are `papertrail correct --supersedes <hash> -m "..."`, plus one pointer line in the old lab book entry.
-4. **One question, one lab book entry.** `papertrail entry "short title"` the same day; fill every section.
+4. **One question, one lab book entry.** `papertrail entry "short title"`, pass the same title to `--question` on its runs, fill every section, and close it with `papertrail entry --close <file>` within the window `papertrail check` shows.
 5. **Verify before you share.** `papertrail verify` (and `--deep` when it matters) passes before results leave the project. Shared numbers carry their entry hash and commit.
 
 ## Read the config before acting
@@ -32,6 +32,7 @@ At containment 2 or above, do not put anything from the project in a public plac
 | Run something | `papertrail run --out results/a.csv results/b.csv --question "short title" -- python fit.py` (the command always goes after `--`) |
 | Extra inputs | `--in path ...`, besides the inputs listed in the config; declare every input that is not committed, or `verify --deep` cannot rerun the work |
 | Link to earlier work | `--parent <hash prefix>` (runs whose outputs are this run's inputs are linked automatically) |
+| Close a lab book entry | `papertrail entry --close labbook/2026-11-20-short-title.md` |
 | Note a decision | `papertrail note -m "..."` |
 | Correct a finding | `papertrail correct --supersedes <hash> -m "..."` |
 | Record earlier work | `papertrail reconstruct -m "..." --built-from "..." --claimed-date 2025-06` |
@@ -52,6 +53,8 @@ To seal a private idea, use the Under Seal skill to write and stamp the note, th
 Work done before the trail existed is recorded with `papertrail reconstruct`, never with `run`. Say in the lab book what it was rebuilt from. Never present a reconstructed entry as if it had been recorded at the time.
 
 ## Lab book entries
+Close each entry within its window; if it will be late, close it anyway and say why in a note. Never backdate.
+
 Sections, in order: Question; Inputs; Method and commands; Results; Findings (numbered, one sentence plus its number); Caveats; Data problems found; Supersedes. Plain, short sentences. Say what is exploratory.
 
 ## Say so when the protocol breaks

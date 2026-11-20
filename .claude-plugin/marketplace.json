@@ -1,11 +1,13 @@
 {
   "name": "paper-trail",
-  "owner": { "name": "Wöden Kusner" },
+  "owner": {
+    "name": "Wöden Kusner"
+  },
   "plugins": [
     {
       "name": "paper-trail",
       "source": "./",
-      "description": "A lab protocol for Claude: hash-chained run ledger, lab book, two strictness dials, anchoring and sealing."
+      "description": "A lab protocol for Claude (hash-chained run ledger, lab book, tunable levels, anchoring and sealing) and a skill for spotting steps that should be tools."
     }
   ]
 }

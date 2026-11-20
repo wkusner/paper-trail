@@ -6,7 +6,7 @@ Every number a project reports must trace back, by hash, to the exact code, inpu
 1. **Only through the trail.** Computations that produce results run through `papertrail run`. No hand-made result tables.
 2. **Commit before you compute.** `papertrail run` refuses uncommitted code (at the `reproducible` tier and above); every run names its commit.
 3. **Append, never edit.** The ledger and the lab book only grow. A correction is a new entry that says what it supersedes.
-4. **One question, one lab book entry.** Written the same day: question, inputs, commands, results with their checks, caveats, what it supersedes.
+4. **One question, one lab book entry.** Closed within the project's window after its last run (by default 36 hours at the `ledgered` tier, so work logged after midnight still counts): question, inputs, commands, results with their checks, caveats, what it supersedes.
 5. **Verify before you share.** `papertrail verify` passes before results go anywhere.
 
 ## Two dials
@@ -35,6 +35,18 @@ A project sets both in `papertrail.toml`. Each dial switches rules on by default
 **What counts as code.** Any file matching the `code` globs that git does not ignore: tracked files, plus new files not yet added. A matching file that is modified, staged, new, deleted or renamed makes the run dirty. Files git ignores are never treated as code, so do not ignore files your computation imports. Outside git, or before the first commit, there is no commit to record; at the `reproducible` tier and above `run` refuses.
 
 **Paths.** In `papertrail.toml`, paths are relative to the project root. On the command line (`--in`, `--out`, `seal FILE`), they are relative to where you are. A path naming an existing file is taken literally even if it contains `[`, `*` or `?`; otherwise it is a glob. Paths outside the project are refused before anything runs.
+
+## Windows
+Some rules are about time. They are windows in hours, with defaults set by the tier and each settable under `[windows]` (0 turns one off). Windows are measured in elapsed hours, not calendar days, so work logged just after midnight is not late.
+
+| Window | sketch | logged | reproducible | ledgered | sealed |
+|---|---|---|---|---|---|
+| `labbook_hours`: close a lab book entry within this long of its last run | 168 | 72 | 48 | 36 | 24 |
+| `anchor_hours`: anchor new entries within this long (when `anchor_head` is on) | off | off | off | 168 | 24 |
+
+A lab book entry is opened with `papertrail entry "title"`; runs name it with `--question "title"`; `papertrail entry --close <file>` records its hash and the time. `verify` and `check` report entries closed late, entries left open past the window, and entries changed after closing. These are protocol notes, not integrity failures: the results are still checked on their own terms, and the lateness is on the record.
+
+**Defaults and tuning.** The tiers and containment levels are standard settings, like biosafety levels: pick the level and you get a coherent set of rules and windows. Any single rule or window can then be tuned in the config, and every ledger entry records exactly what was in force.
 
 ## The chain
 Each entry holds the SHA-256 of the entry before it (`prev`) and of the entries it builds on (`parents`), and its own hash over all of that. Changing, reordering or deleting an earlier entry breaks every link after it, and `verify` reports it.

@@ -79,7 +79,7 @@ def test_new_untracked_code_counts_as_dirty(proj):
 
 
 def test_rule_override_in_config_switches_dial_default(proj):
-    cfg = (proj / "papertrail.toml").read_text() + "commit_before_compute = false\n"
+    cfg = (proj / "papertrail.toml").read_text().replace("[rules]\n", "[rules]\ncommit_before_compute = false\n")
     (proj / "papertrail.toml").write_text(cfg)
     (proj / "sq.py").write_text((proj / "sq.py").read_text() + "# edit\n")
     pt(proj, "run", "--out", "out.txt", "--", PY, "sq.py")
@@ -213,7 +213,7 @@ def test_bad_config_is_reported_plainly(proj):
 
 
 def test_unknown_rule_is_rejected(proj):
-    (proj / "papertrail.toml").write_text((proj / "papertrail.toml").read_text() + "comit_before_compute = false\n")
+    (proj / "papertrail.toml").write_text((proj / "papertrail.toml").read_text().replace("[rules]\n", "[rules]\ncomit_before_compute = false\n"))
     r = pt(proj, "check", check=False)
     assert r.returncode == 2 and "unknown rule" in r.stderr
 
@@ -301,7 +301,7 @@ def test_config_types_are_checked(proj):
     base = (proj / "papertrail.toml").read_text()
     (proj / "papertrail.toml").write_text(base.replace('inputs = ["data/*.txt"]', 'inputs = "data.csv"'))
     assert "list of strings" in pt(proj, "check", check=False).stderr
-    (proj / "papertrail.toml").write_text(base + 'commit_before_compute = "false"\n')
+    (proj / "papertrail.toml").write_text(base.replace("[rules]\n", '[rules]\ncommit_before_compute = "false"\n'))
     assert "true or false" in pt(proj, "check", check=False).stderr
     (proj / "papertrail.toml").write_text(base.replace("containment = 1", "containment = 2.0"))
     assert "whole number" in pt(proj, "check", check=False).stderr
@@ -320,3 +320,63 @@ def test_seal_with_proof_keeps_a_copy(proj, tmp_path_factory):
     pt(proj, "seal", "--hash", "A" * 64, "--proof", str(d / "n.ots"))
     assert (proj / "labbook/seals" / ("a" * 64 + ".txt.ots")).read_bytes() == b"proof"
     assert pt(proj, "seal", "--hash", "b" * 64, "--proof", "missing.ots", check=False).returncode == 2
+
+
+def _age(proj, hours):
+    """Push every entry's time back by `hours` and rehash, to simulate the passage of time."""
+    import hashlib
+    from datetime import datetime, timedelta
+    p = proj / "labbook/ledger.jsonl"
+    out, prev = [], None
+    for line in p.read_text().splitlines():
+        e = json.loads(line)
+        e["time"] = (datetime.fromisoformat(e["time"]) - timedelta(hours=hours)).isoformat(timespec="seconds")
+        e["prev"] = prev
+        body = {k: v for k, v in e.items() if k != "hash"}
+        e["hash"] = hashlib.sha256(json.dumps(body, sort_keys=True, separators=(",", ":"), ensure_ascii=False).encode()).hexdigest()
+        prev = e["hash"]
+        out.append(json.dumps(e, sort_keys=True, separators=(",", ":"), ensure_ascii=False))
+    p.write_text("\n".join(out) + "\n")
+
+
+def test_entry_closed_within_window_is_fine(proj):
+    pt(proj, "entry", "Sum of squares")
+    pt(proj, "run", "--question", "Sum of squares", "--out", "out.txt", "--", PY, "sq.py")
+    r = pt(proj, "entry", "--close", next((proj / "labbook").glob("*sum-of-squares.md")).name)
+    assert "closed" in r.stdout and "window" not in r.stdout
+    assert "protocol:" not in pt(proj, "verify").stdout
+
+
+def test_late_close_is_reported_with_the_window(proj):
+    pt(proj, "entry", "Sum of squares")
+    pt(proj, "run", "--question", "Sum of squares", "--out", "out.txt", "--", PY, "sq.py")
+    _age(proj, 40)  # ledgered tier: 36 h window
+    name = next((proj / "labbook").glob("*sum-of-squares.md")).name
+    assert "window 36 h" in pt(proj, "entry", "--close", name).stdout
+    assert "protocol:" in pt(proj, "verify").stdout
+
+
+def test_window_is_tunable_in_config(proj):
+    cfg = (proj / "papertrail.toml").read_text().replace("[windows]\n", "[windows]\nlabbook_hours = 72\n")
+    (proj / "papertrail.toml").write_text(cfg)
+    pt(proj, "entry", "Sum of squares")
+    pt(proj, "run", "--question", "Sum of squares", "--out", "out.txt", "--", PY, "sq.py")
+    _age(proj, 40)
+    name = next((proj / "labbook").glob("*sum-of-squares.md")).name
+    assert "window" not in pt(proj, "entry", "--close", name).stdout
+    assert ledger(proj)[-1]["settings"]["windows"]["labbook_hours"] == 72
+    assert "set in config" in pt(proj, "check").stdout
+
+
+def test_editing_a_closed_entry_is_noticed(proj):
+    pt(proj, "entry", "Sum of squares")
+    path = next((proj / "labbook").glob("*sum-of-squares.md"))
+    pt(proj, "entry", "--close", path.name)
+    path.write_text(path.read_text() + "late addition\n")
+    assert "changed since it was closed" in pt(proj, "verify").stdout
+
+
+def test_bad_window_value_is_rejected(proj):
+    cfg = (proj / "papertrail.toml").read_text().replace("[windows]\n", '[windows]\nlabbook_hours = "a day"\n')
+    (proj / "papertrail.toml").write_text(cfg)
+    assert "whole number of hours" in pt(proj, "check", check=False).stderr

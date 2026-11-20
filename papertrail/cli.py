@@ -21,7 +21,7 @@ FIVE_RULES = [
     ("Only through the trail.", "Computations that produce results run through `papertrail run`. No hand-made result tables."),
     ("Commit before you compute.", "Every run names the commit it ran at; uncommitted code is refused or recorded."),
     ("Append, never edit.", "The ledger and lab book only grow. A correction is a new entry naming what it supersedes."),
-    ("One question, one lab book entry.", "Written the same day: question, inputs, commands, results, caveats, what it supersedes."),
+    ("One question, one lab book entry.", "Closed within the window (36 hours at the ledgered tier): question, inputs, commands, results, caveats, what it supersedes."),
     ("Verify before you share.", "`papertrail verify` passes before results go anywhere."),
 ]
 
@@ -218,9 +218,15 @@ def cmd_reconstruct(a):
     print(f"reconstructed run {e['hash'][:12]} (recorded today; claimed date {a.claimed_date or 'not given'})")
 
 
+def slugify(title: str) -> str:
+    return re.sub(r"[^a-z0-9]+", "-", title.lower()).strip("-") or "entry"
+
+
 def cmd_entry(a):
     cfg = C.load()
-    slug = re.sub(r"[^a-z0-9]+", "-", a.title.lower()).strip("-") or "entry"
+    if a.close:
+        return close_entry(cfg, a.title)
+    slug = slugify(a.title)
     today = date.today().isoformat()
     path = cfg.labbook / f"{today}-{slug}.md"
     if path.exists():
@@ -229,8 +235,60 @@ def cmd_entry(a):
     path.write_text(ENTRY_TEMPLATE.format(title=a.title, today=today))
     with (cfg.labbook / "README.md").open("a") as f:
         f.write(f"- {today}: [{a.title}]({path.name})\n")
-    L.append(cfg.ledger, "note", {"text": f"opened lab book entry {path.name}", "labbook_entry": path.name}, cfg.settings())
+    L.append(cfg.ledger, "note", {"text": f"opened lab book entry {path.name}", "labbook_entry": path.name, "slug": slug}, cfg.settings())
     print(path.relative_to(cfg.root))
+    print(f"use --question \"{a.title}\" on its runs; close it with: papertrail entry --close {path.relative_to(cfg.root)}", file=sys.stderr)
+
+
+def close_entry(cfg: C.Config, given: str):
+    """Record that a lab book entry is finished: its hash and the time."""
+    path = Path(given)
+    if not path.is_file():
+        path = cfg.labbook / given
+    if not path.is_file():
+        die(f"no lab book entry {given}")
+    name = path.name
+    entries = L.read(cfg.ledger)
+    opened = [e for e in entries if e["kind"] == "note" and e["body"].get("labbook_entry") == name]
+    if not opened:
+        die(f"{name} was not opened with `papertrail entry`")
+    e = L.append(cfg.ledger, "note", {"text": f"closed lab book entry {name}", "closes": name,
+                                      "sha256": G.sha256_file(path)}, cfg.settings(), [opened[0]["hash"]])
+    print(f"closed {name} ({e['hash'][:12]})")
+    for line in timeliness(cfg, L.read(cfg.ledger), only=name):
+        print("  " + line)
+
+
+def timeliness(cfg: C.Config, entries: list[dict], only: str | None = None) -> list[str]:
+    """Lab book entries checked against the window: closed in time after their last run, unchanged since."""
+    hours = cfg.window("labbook_hours")
+    out = []
+    opened = {e["body"]["labbook_entry"]: e for e in entries if e["kind"] == "note" and e["body"].get("labbook_entry")}
+    closed = {}
+    for e in entries:
+        if e["kind"] == "note" and e["body"].get("closes"):
+            closed[e["body"]["closes"]] = e  # the latest close counts
+    for name, op in opened.items():
+        if only and name != only:
+            continue
+        slug = op["body"].get("slug")
+        runs = [e for e in entries if e["kind"] == "run" and not e["body"].get("reconstructed")
+                and slugify(e["body"].get("question", "")) == slug and slug]
+        cl = closed.get(name)
+        if cl is None:
+            if runs and hours:
+                age = (L.parse_time(L.now()) - L.parse_time(runs[-1]["time"])).total_seconds() / 3600
+                if age > hours:
+                    out.append(f"{name}: not closed, {age:.0f} h after its last run (window {hours} h)")
+            continue
+        if runs and hours:
+            late = (L.parse_time(cl["time"]) - L.parse_time(runs[-1]["time"])).total_seconds() / 3600
+            if late > hours:
+                out.append(f"{name}: closed {late:.0f} h after its last run (window {hours} h)")
+        p = cfg.labbook / name
+        if p.is_file() and G.sha256_file(p) != cl["body"]["sha256"]:
+            out.append(f"{name}: changed since it was closed (a pointer line is fine; say so with a note)")
+    return out
 
 
 def _stamp(path: Path) -> bool:
@@ -376,6 +434,9 @@ def verify(cfg: C.Config, deep: bool) -> tuple[list[str], list[str], tuple[int, 
                 head = f.read_text().strip()
                 why = "names an entry missing from the ledger" if kind == "anchor" and head not in hashes else "has no entry in the ledger"
                 problems.append(f"{f.relative_to(cfg.root)}: {why} (entries removed?)")
+    late = timeliness(cfg, entries)
+    if cfg.rule("labbook_on_time"):
+        notes += [f"protocol: {x}" for x in late]
     reran = (0, 0)
     if deep:
         if not G.is_repo(cfg.root):
@@ -419,6 +480,10 @@ def cmd_check(a):
     for r, on in cfg.rules().items():
         src = " (set in config)" if r in cfg.overrides else ""
         print(f"  [{'x' if on else ' '}] {C.RULE_TEXT[r]}{src}")
+    print("\nWindows")
+    for w, h in cfg.windows().items():
+        src = " (set in config)" if w in cfg.window_overrides else ""
+        print(f"  {C.WINDOW_TEXT[w].format(h=h) if h else w + ': off'}{src}")
     entries = L.read(cfg.ledger)
     chain = L.check_chain(entries) if entries else ["the ledger is empty"]
     print("\nState")
@@ -437,7 +502,13 @@ def cmd_check(a):
         anchors = [e["seq"] for e in entries if e["kind"] == "anchor"]
         since = len(entries) - 1 - (anchors[-1] if anchors else -1)
         if cfg.rule("anchor_head") and since > 0:
-            print(f"  {since} entries since the last anchor: run `papertrail anchor`")
+            first_new = entries[(anchors[-1] + 1) if anchors else 0]
+            age = (L.parse_time(L.now()) - L.parse_time(first_new["time"])).total_seconds() / 3600
+            limit = cfg.window("anchor_hours")
+            over = f"; over the {limit} h window" if limit and age > limit else ""
+            print(f"  {since} entries since the last anchor, oldest {age:.0f} h ago{over}: run `papertrail anchor`")
+        for x in timeliness(cfg, entries):
+            print(f"  protocol: {x}")
     sys.exit(1 if chain else 0)
 
 
@@ -482,8 +553,9 @@ def main(argv=None):
     s.add_argument("--parent", action="append")
     s.set_defaults(fn=cmd_reconstruct)
 
-    s = sub.add_parser("entry", help="open a lab book entry for one question")
-    s.add_argument("title")
+    s = sub.add_parser("entry", help="open a lab book entry for one question, or close it with --close")
+    s.add_argument("title", help="the question's short title, or with --close the entry's file")
+    s.add_argument("--close", action="store_true", help="record that the entry is finished (its hash and the time)")
     s.set_defaults(fn=cmd_entry)
 
     s = sub.add_parser("anchor", help="timestamp the chain head")
