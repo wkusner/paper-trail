@@ -1,6 +1,6 @@
 ---
 name: muscle-memory
-description: Use during any ongoing work with someone, to notice repeated friction (a step Claude keeps reasoning out, or something the person keeps asking for) and propose the right reflex: a hook, a tool, a preference or a template.
+description: Use during any ongoing work with someone, to notice repeated friction (a step Claude keeps reasoning out, or something the person keeps asking for) and propose the right reflex: a hook, a tool, a skill, a preference or a template.
 ---
 
 # Muscle Memory
@@ -11,8 +11,9 @@ Some work should be thought through every time; some should become reflex. When 
 From most hard-wired to least:
 1. **Hook or command** (Claude Code): runs with no model in the loop. A session-start hook (e.g. `papertrail check` every session), a pre-tool hook that enforces a rule (block raw runs in a Paper Trail project), a prompt hook that attaches context (the ssh host list when a server is mentioned), or a slash command whose output comes straight from a script (`/hosts`). Use for anything that must happen every time, or must never be skipped.
 2. **Tool**: a script or command Claude calls; the answer is exact, testable and the same every time. Use for lookups, counts, hashes, date math, format conversions, rule checks.
-3. **Preference**: how Claude presents things, applied to every answer from the start. Use for habits like putting anything to paste in its own code block, offering real decisions as clickable choices, or ending a working session with a suggested next prompt.
-4. **Template**: reusable text, such as a recurring prompt, an entry skeleton or a message.
+3. **Skill**: a recurring procedure that still needs judgment along the way, written down once so it runs the same way each time: several steps, some tool calls, some writing or deciding. Use for workflows like sealing a note, closing out a session, preparing a submission or reviewing against a checklist. A skill can call tools; the exact parts inside it should be tools, not prose.
+4. **Preference**: how Claude presents things, applied to every answer from the start. Use for habits like putting anything to paste in its own code block, offering real decisions as clickable choices, or ending a working session with a suggested next prompt.
+5. **Template**: reusable text, such as a recurring prompt, an entry skeleton or a message.
 
 In claude.ai chat there are no hooks; the nearest equivalents are preferences and skills.
 
@@ -24,6 +25,13 @@ A step is a tool candidate when most of these hold:
 - **Repeated:** it has come up before in this work, or plainly will (each session, each run, each file).
 - **Checkable:** a wrong answer would matter and could be caught by a test.
 - **Rule-shaped:** it follows a written rule ("within 36 hours", "commit before compute", "no file over 5 MB").
+
+A procedure is a skill candidate when the same sequence of steps keeps being walked through (or re-explained), the person corrects it the same way more than once, or it has a checklist that keeps being reconstructed from memory.
+
+Also watch the skills that already exist:
+- **Use them.** When a request matches an existing skill, follow the skill instead of improvising the procedure again.
+- **Improve them.** When the same correction is made to a skill's output twice, propose an edit to the skill.
+- **Split them.** When the same exact step inside a skill keeps being reasoned out, move that step into a tool the skill calls.
 
 It stays a model call when it needs judgment, taste, language or a decision only the person can make: drafting, reviewing an argument, choosing between designs.
 
@@ -42,12 +50,14 @@ One or two lines, at a natural pause, not in the middle of the work:
 
 > This should be a tool: checking that every lab book entry was closed within 36 hours of its run. We've done it by hand three times, and a miss changes the record. A 30-line check in `papertrail verify` would do it. Add it to the list, or build it now?
 
+> This should be a skill: we've walked through the same five release steps three times now. Write them up as a skill?
+
 > This should be a preference: you've asked for a copyable block three times. Save "anything to paste goes in its own code block" as a standing preference?
 
 Then carry on with the task as asked. Never stop the work to build anything unasked, and save a preference only when the person says yes.
 
 ## Keep a list
-Candidates go in `TOOLS.md` at the root of the project (or in the project's notes if there is no repository), one line each: the friction, how often it comes up, what a miss costs, where the reflex should live (hook, tool, preference, template), and a sketch. The person decides what gets built. When one is built, the line says where it lives.
+Candidates go in `TOOLS.md` at the root of the project (or in the project's notes if there is no repository), one line each: the friction, how often it comes up, what a miss costs, where the reflex should live (hook, tool, skill, preference, template), and a sketch. The person decides what gets built. When one is built, the line says where it lives.
 
 ## When Paper Trail is in use
 A rule in the protocol that Claude checks by reasoning is a candidate for `papertrail` itself, or for a hook. Note it in `TOOLS.md` with the rule's name, so the protocol and the tool stay one thing.
