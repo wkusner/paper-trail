@@ -1,11 +1,11 @@
 ---
 name: muscle-memory
-description: Use while working with Wöden on any task, to notice repeated friction (a step Claude keeps reasoning out, or something he keeps asking for) and propose the right reflex: a hook, a tool, a preference or a template.
+description: Use during any ongoing work with someone, to notice repeated friction (a step Claude keeps reasoning out, or something the person keeps asking for) and propose the right reflex: a hook, a tool, a preference or a template.
 ---
 
 # Muscle Memory
 
-Some work should be thought through every time; some should become reflex. When Claude and Wöden hit the same friction again and again (a step Claude reasons out by hand, or something Wöden keeps asking for), it should become a reflex, and the reflex should live in the right place.
+Some work should be thought through every time; some should become reflex. When Claude and the person it works with hit the same friction again and again (a step Claude reasons out by hand, or something the person keeps asking for), it should become a reflex, and the reflex should live in the right place.
 
 ## Where a reflex lives
 From most hard-wired to least:
@@ -17,7 +17,7 @@ From most hard-wired to least:
 In claude.ai chat there are no hooks; the nearest equivalents are preferences and skills.
 
 ## What to notice
-Two kinds of signal. Wöden repeating a request ("I need the ssh name", "give me a copyable block", "give me choices", "what's the next prompt?") is friction on his side: usually a preference, a template or a command. Claude repeating a computation is friction on the model's side: usually a tool or a hook.
+Two kinds of signal. The person repeating a request ("I need the ssh name", "give me a copyable block", "give me choices", "what's the next prompt?") is friction on their side: usually a preference, a template or a command. Claude repeating a computation is friction on the model's side: usually a tool or a hook.
 
 A step is a tool candidate when most of these hold:
 - **Exact:** there is one right answer (a hash, a count, a sum, a date difference, a format conversion, whether a rule was followed).
@@ -25,12 +25,12 @@ A step is a tool candidate when most of these hold:
 - **Checkable:** a wrong answer would matter and could be caught by a test.
 - **Rule-shaped:** it follows a written rule ("within 36 hours", "commit before compute", "no file over 5 MB").
 
-It stays a model call when it needs judgment, taste, language or a decision only Wöden can make: drafting, reviewing an argument, choosing between designs.
+It stays a model call when it needs judgment, taste, language or a decision only the person can make: drafting, reviewing an argument, choosing between designs.
 
-Signs in the moment: Claude is about to recount, recompute or re-verify something by reading it; Claude is applying a written rule by hand; the same three commands are being typed again; an answer would change if asked twice; Wöden asks for the same thing a third time.
+Signs in the moment: Claude is about to recount, recompute or re-verify something by reading it; Claude is applying a written rule by hand; the same three commands are being typed again; an answer would change if asked twice; the person asks for the same thing a third time.
 
 ## Is it worth building?
-Weigh it the way the old chart does (time saved times how often, across the life of the work, against the cost to build), with three additions for the two of us:
+Weigh it the way the old chart does (time saved times how often, across the life of the work, against the cost to build), with three additions for a person working with a model:
 - **Each model call costs** tokens, waiting, and a small chance of a different answer. For checks that guard results, that chance alone justifies a tool or a hook.
 - **Building costs more than it looks.** Code needs debugging, rethinking and upkeep. Prefer the smallest reflex that works: a preference before a tool, a twenty-line script before a framework.
 - **The third time is the trigger.** Once is a task, twice is a coincidence; the third time, propose the reflex.
@@ -44,10 +44,10 @@ One or two lines, at a natural pause, not in the middle of the work:
 
 > This should be a preference: you've asked for a copyable block three times. Save "anything to paste goes in its own code block" as a standing preference?
 
-Then carry on with the task as asked. Never stop the work to build anything unasked, and save a preference only when Wöden says yes.
+Then carry on with the task as asked. Never stop the work to build anything unasked, and save a preference only when the person says yes.
 
 ## Keep a list
-Candidates go in `TOOLS.md` at the root of the project (or in the project's notes if there is no repository), one line each: the friction, how often it comes up, what a miss costs, where the reflex should live (hook, tool, preference, template), and a sketch. Wöden decides what gets built. When one is built, the line says where it lives.
+Candidates go in `TOOLS.md` at the root of the project (or in the project's notes if there is no repository), one line each: the friction, how often it comes up, what a miss costs, where the reflex should live (hook, tool, preference, template), and a sketch. The person decides what gets built. When one is built, the line says where it lives.
 
 ## When Paper Trail is in use
 A rule in the protocol that Claude checks by reasoning is a candidate for `papertrail` itself, or for a hook. Note it in `TOOLS.md` with the rule's name, so the protocol and the tool stay one thing.

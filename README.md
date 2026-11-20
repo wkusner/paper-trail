@@ -4,7 +4,7 @@
 
 Paper Trail is a lab protocol and a small tool that enforces it. Wrap any command, in any language, with `papertrail run`, and it records the commit, the code, the inputs, the outputs and the environment in an append-only, hash-chained ledger. A lab book is kept alongside it, one entry per question. `papertrail verify` checks the whole chain, and `verify --deep` reruns the work in a scratch checkout and checks it reproduces to the same bytes.
 
-Each project chooses how strict to be with two dials, which set standard defaults for every rule and time window (any of them can then be tuned): a **rigor tier** (sketch, logged, reproducible, ledgered, sealed) and a **containment level** (open, standard, private, restricted, air-gapped). Trusted dates come from anchoring the chain head with OpenTimestamps; private results can be sealed by hash, in the manner of [Under Seal].
+Each project chooses how strict to be with two dials, which set standard defaults for every rule and time window (any of them can then be tuned): a **rigor tier** (sketch, logged, reproducible, ledgered, sealed) and a **containment level** (open, standard, private, restricted, air-gapped). Trusted dates come from anchoring the chain head with OpenTimestamps; private results can be sealed by hash, like a sealed envelope deposited with a date.
 
 It comes with two Claude skills:
 - **paper-trail**: Claude follows the protocol, checks it at the start and end of each session, and says plainly when a step broke it.
@@ -58,4 +58,3 @@ Version 0.1. The clean-room features (locked inputs, pre-registered builds, a ga
 ## Origins
 Generalized from a protocol first written for a topological data analysis project at Lawrence University, and part of the Lawrence generative lab.
 
-[Under Seal]: https://lu-generative-lab.github.io/

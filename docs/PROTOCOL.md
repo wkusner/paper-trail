@@ -69,7 +69,7 @@ A run that reads a file another run wrote, byte for byte, is linked to it as a p
 Entry times and git dates are self-reported. For dates others can trust, `papertrail anchor` writes the current head hash to `labbook/anchors/` and stamps it with OpenTimestamps if `ots` is installed. Since each entry includes the one before it, one stamp dates everything before it. Run `ots upgrade` on the proof after a few hours and commit it. The head hash can also go into a public sealed ledger, so a private project still has public, dated evidence.
 
 ## Sealing
-`papertrail seal FILE` records only the file's SHA-256 (and an optional public label) and stamps it. Opening it later means revealing the file; anyone can hash it and compare. A note already sealed with Under Seal is recorded with `papertrail seal --hash <sha256> --proof <file.ots>`; the proof is copied into `labbook/seals/`.
+`papertrail seal FILE` records only the file's SHA-256 (and an optional public label) and stamps it. Opening it later means revealing the file; anyone can hash it and compare. A note already hashed and stamped by another tool is recorded with `papertrail seal --hash <sha256> --proof <file.ots>`; the proof is copied into `labbook/seals/`.
 
 Keep the sealed file itself out of the repository. A short or guessable note can be found by hashing guesses, so add a line of random characters to it before sealing.
 

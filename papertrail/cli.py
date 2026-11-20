@@ -315,7 +315,7 @@ def cmd_anchor(a):
     if stamped:
         print(f"stamped {f.name}.ots; run `ots upgrade` on it in a few hours, then commit it")
     else:
-        print(f"no OpenTimestamps client found; stamp {f.relative_to(cfg.root)} with `ots stamp` (or with Under Seal), then commit the .ots file")
+        print(f"no OpenTimestamps client found; stamp {f.relative_to(cfg.root)} with `ots stamp` (or any OpenTimestamps tool), then commit the .ots file")
 
 
 def cmd_seal(a):
@@ -350,7 +350,7 @@ def cmd_seal(a):
         except ValueError:
             pass
     if not body["ots"]:
-        print(f"no timestamp proof yet; stamp {f.relative_to(cfg.root)} with `ots stamp` or Under Seal")
+        print(f"no timestamp proof yet; stamp {f.relative_to(cfg.root)} with `ots stamp` or any OpenTimestamps tool")
 
 
 def _rerun(cfg: C.Config, e: dict) -> tuple[str, str]:
@@ -563,7 +563,7 @@ def main(argv=None):
 
     s = sub.add_parser("seal", help="record a private file's hash without its contents")
     s.add_argument("file", nargs="?")
-    s.add_argument("--hash", help="a SHA-256 already computed (e.g. by Under Seal)")
+    s.add_argument("--hash", help="a SHA-256 already computed (e.g. by another sealing tool)")
     s.add_argument("--proof", help="an existing .ots proof for it")
     s.add_argument("--label", help="a public label (optional). A short or guessable note can be found from its hash: add a random line to it before sealing")
     s.set_defaults(fn=cmd_seal)

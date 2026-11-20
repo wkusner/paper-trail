@@ -40,8 +40,8 @@ At containment 2 or above, do not put anything from the project in a public plac
 | Seal a private note | `papertrail seal path/to/note` or `papertrail seal --hash <sha256> --proof note.ots` |
 | Check | `papertrail verify`, `papertrail verify --deep`, `papertrail check` |
 
-## Under Seal
-To seal a private idea, use the Under Seal skill to write and stamp the note, then record it here with `papertrail seal --hash <its sha256> --proof <its .ots>`. The ledger keeps only the hash. To date the whole chain, `papertrail anchor`, then stamp the anchor file (Under Seal or `ots stamp`) and commit the proof.
+## Sealing and anchoring
+To seal a private note, `papertrail seal path/to/note`; the ledger keeps only its hash. If the note was already hashed and stamped by another tool or skill, record it with `papertrail seal --hash <its sha256> --proof <its .ots>`. To date the whole chain, `papertrail anchor`, then stamp the anchor file (`ots stamp`, if `papertrail` could not) and commit the proof.
 
 ## Things that trip people up
 - `--in`, `--out` and `seal FILE` paths are relative to the current directory; paths in `papertrail.toml` are relative to the project root.
