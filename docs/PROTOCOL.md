@@ -1,6 +1,6 @@
 # The Paper Trail protocol
 
-Every number a project reports must trace back, by hash, to the exact code, inputs and environment that made it, and anyone must be able to check that trail and, where the work allows, rerun it to the same bytes. The trace lives in the ledger, `labbook/ledger.jsonl`; the reasoning lives in the lab book, `labbook/`.
+Every research output a project reports must trace back, by hash, to the exact code, inputs and environment that made it, and anyone must be able to check that trail and, where the work allows, rerun it to the same bytes. The trace lives in the ledger, `labbook/ledger.jsonl`; the reasoning lives in the lab book, `labbook/`.
 
 ## The five rules
 1. **Only through the trail.** Computations that produce results run through `papertrail run`. No hand-made result tables.

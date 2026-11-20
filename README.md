@@ -1,6 +1,6 @@
 # Paper Trail
 
-**Every number traces back to what made it.**
+**Every research output traces back to what made it.**
 
 Paper Trail is a lab protocol and a small tool that enforces it. Wrap any command, in any language, with `papertrail run`, and it records the commit, the code, the inputs, the outputs and the environment in an append-only, hash-chained ledger. A lab book is kept alongside it, one entry per question. `papertrail verify` checks the whole chain, and `verify --deep` reruns the work in a scratch checkout and checks it reproduces to the same bytes.
 
