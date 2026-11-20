@@ -53,7 +53,7 @@ papertrail anchor
 The protocol in full: [docs/PROTOCOL.md](docs/PROTOCOL.md).
 
 ## Status
-Version 0.1. The clean-room features (locked inputs, pre-registered builds, a gated channel with an information budget) are planned next.
+Version 0.1. Planned next, in [docs/ROADMAP.md](docs/ROADMAP.md): an AI work ledger (models, tokens, tallies), clean-room builds, and hooks.
 
 ## Origins
 Generalized from a protocol first written for a topological data analysis project at Lawrence University, and part of the Lawrence generative lab.
