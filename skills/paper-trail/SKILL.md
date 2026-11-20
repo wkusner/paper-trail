@@ -5,7 +5,7 @@ description: Use when working in a project that has a papertrail.toml, or when a
 
 # Paper Trail
 
-Every research output a project reports must trace back, by hash, to the exact code, inputs and environment that made it, and anyone must be able to check that trail. The tool is `papertrail` (install: `pip install git+https://github.com/<owner>/paper-trail`). The readable protocol is `docs/PROTOCOL.md` in the Paper Trail repository.
+Every research output a project reports must trace back, by hash, to the exact code, inputs and environment that made it, and anyone must be able to check that trail. The tool is `papertrail` (install: `pip install git+https://github.com/wkusner/paper-trail`). The readable protocol is `docs/PROTOCOL.md` in the Paper Trail repository.
 
 ## At the start and end of every session
 1. Run `papertrail check`. Show the person the five rules and the rules in force, in a few lines.

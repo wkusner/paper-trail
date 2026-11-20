@@ -15,11 +15,11 @@ A model call is the right way to draft, review or decide. It is the wrong way to
 
 ## Install
 ```
-pip install git+https://github.com/<owner>/paper-trail
+pip install git+https://github.com/wkusner/paper-trail
 ```
 Python 3.11 or later on macOS or Linux (not Windows yet); no other dependencies. For trusted timestamps, also install the OpenTimestamps client (`pip install opentimestamps-client`).
 
-**As a Claude Code plugin:** `/plugin marketplace add <owner>/paper-trail`, then `/plugin install paper-trail@paper-trail`.
+**As a Claude Code plugin:** `/plugin marketplace add wkusner/paper-trail`, then `/plugin install paper-trail@paper-trail`.
 **As a Claude skill on its own:** upload the `skills/paper-trail` folder as a skill.
 
 ## Quick start
