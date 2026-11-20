@@ -1,0 +1,22 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "papertrail"
+version = "0.1.0"
+description = "A protocol wrapper that leaves a verifiable, hash-chained trail behind every result."
+readme = "README.md"
+requires-python = ">=3.11"
+license = { text = "MIT" }
+authors = [{ name = "Wöden Kusner" }]
+dependencies = []
+
+[project.optional-dependencies]
+test = ["pytest"]
+
+[project.scripts]
+papertrail = "papertrail.cli:main"
+
+[tool.setuptools]
+packages = ["papertrail"]

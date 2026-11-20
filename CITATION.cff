@@ -1,0 +1,9 @@
+cff-version: 1.2.0
+message: "If you use Paper Trail, please cite it as below."
+title: "Paper Trail: a protocol wrapper for verifiable computational work"
+version: 0.1.0
+authors:
+  - family-names: Kusner
+    given-names: Wöden
+    affiliation: Lawrence University
+license: MIT
